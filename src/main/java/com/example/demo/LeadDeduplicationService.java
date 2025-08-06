@@ -45,6 +45,17 @@ public class LeadDeduplicationService {
             return new ArrayList<>();
         }
         
+        // Create index mapping for O(1) lookup instead of O(n) linear search
+        Map<String, Integer> leadToIndex = new HashMap<>();
+        for (int i = 0; i < leads.size(); i++) {
+            Lead lead = leads.get(i);
+            if (lead.getId() != null && lead.getEmail() != null) {
+                // Create a unique key for each lead based on ID, email, and entry date
+                String leadKey = createLeadKey(lead);
+                leadToIndex.put(leadKey, i);
+            }
+        }
+        
         // Track the best lead for each unique ID and email
         Map<String, Lead> bestLeadById = new HashMap<>();
         Map<String, Lead> bestLeadByEmail = new HashMap<>();
@@ -58,13 +69,13 @@ public class LeadDeduplicationService {
             
             // Check for ID duplicates
             Lead existingById = bestLeadById.get(currentLead.getId());
-            if (shouldReplaceLead(existingById, currentLead, i, getIndexOfLead(leads, existingById))) {
+            if (shouldReplaceLead(existingById, currentLead, i, getIndexOfLead(leadToIndex, existingById))) {
                 bestLeadById.put(currentLead.getId(), currentLead);
             }
             
             // Check for email duplicates
             Lead existingByEmail = bestLeadByEmail.get(currentLead.getEmail());
-            if (shouldReplaceLead(existingByEmail, currentLead, i, getIndexOfLead(leads, existingByEmail))) {
+            if (shouldReplaceLead(existingByEmail, currentLead, i, getIndexOfLead(leadToIndex, existingByEmail))) {
                 bestLeadByEmail.put(currentLead.getEmail(), currentLead);
             }
         }
@@ -93,8 +104,8 @@ public class LeadDeduplicationService {
             if (!finalLeads.contains(candidate)) {
                 Lead conflictingLead = findConflictingLead(finalLeads, candidate);
                 if (conflictingLead != null) {
-                    int currentIndex = getIndexOfLead(leads, candidate);
-                    int conflictingIndex = getIndexOfLead(leads, conflictingLead);
+                    int currentIndex = getIndexOfLead(leadToIndex, candidate);
+                    int conflictingIndex = getIndexOfLead(leadToIndex, conflictingLead);
                     
                     if (shouldReplaceLead(conflictingLead, candidate, currentIndex, conflictingIndex)) {
                         finalLeads.remove(conflictingLead);
@@ -138,20 +149,20 @@ public class LeadDeduplicationService {
     }
     
     /**
-     * Finds the index of a lead in the original list
+     * Creates a unique key for a lead based on ID, email, and entry date
      */
-    private int getIndexOfLead(List<Lead> leads, Lead targetLead) {
+    private String createLeadKey(Lead lead) {
+        return lead.getId() + "|" + lead.getEmail() + "|" + lead.getEntryDate().toString();
+    }
+    
+    /**
+     * Gets the index of a lead using HashMap lookup - O(1) instead of O(n)
+     */
+    private int getIndexOfLead(Map<String, Integer> leadToIndex, Lead targetLead) {
         if (targetLead == null) return -1;
         
-        for (int i = 0; i < leads.size(); i++) {
-            Lead lead = leads.get(i);
-            if (Objects.equals(lead.getId(), targetLead.getId()) && 
-                Objects.equals(lead.getEmail(), targetLead.getEmail()) &&
-                Objects.equals(lead.getEntryDate(), targetLead.getEntryDate())) {
-                return i;
-            }
-        }
-        return -1;
+        String leadKey = createLeadKey(targetLead);
+        return leadToIndex.getOrDefault(leadKey, -1);
     }
     
     /**
