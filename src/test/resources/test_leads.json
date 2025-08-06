@@ -1,0 +1,36 @@
+{
+  "leads": [
+    {
+      "_id": "test1",
+      "email": "test1@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "address": "123 Test St",
+      "entryDate": "2024-01-01T10:00:00+00:00"
+    },
+    {
+      "_id": "test2",
+      "email": "test2@example.com",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "address": "456 Test Ave",
+      "entryDate": "2024-01-01T11:00:00+00:00"
+    },
+    {
+      "_id": "test1",
+      "email": "different@example.com",
+      "firstName": "John",
+      "lastName": "Updated",
+      "address": "789 New St",
+      "entryDate": "2024-01-01T12:00:00+00:00"
+    },
+    {
+      "_id": "test3",
+      "email": "test1@example.com",
+      "firstName": "Another",
+      "lastName": "Person",
+      "address": "999 Other St",
+      "entryDate": "2024-01-01T13:00:00+00:00"
+    }
+  ]
+} 
