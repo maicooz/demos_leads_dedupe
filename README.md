@@ -17,6 +17,21 @@ The deduplication process ensures:
 - Java 17 or higher
 - Maven 3.6+ 
 
+## Quick Start
+
+### 1. Clone and Navigate
+```bash
+cd /path/to/your/project
+```
+
+### 2. Run the Application
+```bash
+# Deduplicate the sample leads file
+mvn exec:java -Dexec.args="dedupe leads.json"
+```
+
+That's it! The application will process your leads and create a `deduplicated_leads.json` file.
+
 ## Project Structure
 
 ```
@@ -42,28 +57,14 @@ demo-leads/
 └── README.md                   # This file
 ```
 
-## Building the Project
-
-### Compile the project
-```bash
-mvn clean compile
-```
-
-### Run tests
-```bash
-mvn test
-```
-
-### Package into JAR
-```bash
-mvn clean package
-```
-
-This creates an executable JAR in the `target/` directory.
-
 ## Running the Application
 
-### Using Maven exec plugin (recommended for development)
+### Simple Command (Recommended)
+```bash
+mvn exec:java -Dexec.args="dedupe leads.json"
+```
+
+### Other Commands
 ```bash
 # Show help
 mvn exec:java -Dexec.args="help"
@@ -71,23 +72,17 @@ mvn exec:java -Dexec.args="help"
 # Show version
 mvn exec:java -Dexec.args="version"
 
-# Deduplicate leads (output to deduplicated_leads.json)
-mvn exec:java -Dexec.args="dedupe leads.json"
-
-# Deduplicate leads with custom output file
-mvn exec:java -Dexec.args="dedupe leads.json clean_leads.json"
+# Custom output file
+mvn exec:java -Dexec.args="dedupe leads.json my_clean_leads.json"
 ```
 
-### Using the compiled JAR
+### Using the Compiled JAR
 ```bash
 # First package the application
 mvn clean package
 
 # Then run the JAR
-java -jar target/demo-leads-1.0.0.jar help
-java -jar target/demo-leads-1.0.0.jar version
 java -jar target/demo-leads-1.0.0.jar dedupe leads.json
-java -jar target/demo-leads-1.0.0.jar dedupe leads.json output.json
 ```
 
 ## Available Commands
@@ -115,22 +110,79 @@ The input JSON file must contain a `leads` array with objects having these field
 - `address` (string): Contact's address
 - `entryDate` (string): ISO 8601 formatted date with timezone (e.g., "2014-05-07T17:30:20+00:00")
 
-### Example Usage
+## Example Output and Logging
 
+When you run the deduplication, you'll see detailed logging showing exactly what's happening:
+
+### Sample Run
 ```bash
-# Process the sample leads file
 mvn exec:java -Dexec.args="dedupe leads.json"
-
-# Output will show:
-# Reading leads from: leads.json
-# Found 15 leads
-# Deduplicating leads...
-# Writing 10 deduplicated leads to: deduplicated_leads.json
-# Deduplication completed successfully!
-# Removed 5 duplicate(s)
 ```
 
+### Console Output
+```
+Demo Leads CLI Application
+==========================
+Reading leads from: leads.json
+Found 10 leads
+Deduplicating leads...
+Writing 5 deduplicated leads to: deduplicated_leads.json
+Deduplication completed successfully!
+Removed 5 duplicate(s)
+```
+
+### Detailed Logging (INFO level)
+The application provides comprehensive logging showing the deduplication process:
+
+```
+[INFO] Reading leads from file: leads.json
+[INFO] Successfully read 10 leads from file
+[INFO] Starting deduplication process for 10 leads
+[INFO] Created index mapping for 10 valid leads
+
+[INFO] Duplicate ID detected: jkj238238jdsnfsj23
+[INFO] Replacing existing lead by ID: jkj238238jdsnfsj23 - Reason: Current lead has newer date: 2014-05-07T17:32:20Z vs 2014-05-07T17:30:20Z
+
+[INFO] Duplicate email detected: foo@bar.com
+[INFO] Replacing existing lead by email: foo@bar.com - Reason: Current lead has newer date: 2014-05-07T17:32:20Z vs 2014-05-07T17:30:20Z
+
+[INFO] After initial deduplication - Best leads by ID: 8, Best leads by email: 6
+[INFO] Total unique candidates to process: 9
+[INFO] After first pass (non-conflicting leads): 5 leads added
+[INFO] Conflict resolution needed - Candidate: ID=jkj238238jdsnfsj23, Email=coo@bar.com, EntryDate=2014-05-07T17:32:20Z, Index=3 | Conflicting: ID=jkj238238jdsnfsj23, Email=bill@bar.com, EntryDate=2014-05-07T17:33:20Z, Index=9
+[INFO] Keeping conflicting lead - Reason: Current lead has newer date: 2014-05-07T17:33:20Z vs 2014-05-07T17:32:20Z
+
+[INFO] After conflict resolution: 5 leads in final result
+[INFO] Deduplication complete. Input: 10 leads, Output: 5 leads, Removed: 5 duplicates
+[INFO] Writing 5 leads to file: deduplicated_leads.json
+[INFO] Successfully wrote leads to file: deduplicated_leads.json
+```
+
+### What the Logging Shows
+- **Input/Output Summary**: Total leads processed and results
+- **Duplicate Detection**: Each duplicate found with details about why it was replaced
+- **Decision Logic**: Clear reasoning for each deduplication decision
+- **Conflict Resolution**: How conflicts between ID and email duplicates are resolved
+- **File Operations**: Confirmation of reading and writing operations
+
+### Sample Results
+**Input**: `leads.json` with 10 leads containing duplicates
+**Output**: `deduplicated_leads.json` with 5 unique leads
+**Removed**: 5 duplicate entries based on deduplication rules
+
 ## Development
+
+### Building the Project
+```bash
+# Compile
+mvn clean compile
+
+# Run tests
+mvn test
+
+# Package into JAR
+mvn clean package
+```
 
 ### Adding New Commands
 
