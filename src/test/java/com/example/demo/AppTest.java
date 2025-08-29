@@ -236,4 +236,30 @@ public class AppTest {
         // At least one of the newer leads should be present
         assertTrue(hasNewerIdLead || hasNewerEmailLead, "Should prefer newer dates in conflicts");
     }
+
+    @Test
+    @DisplayName("Test LeadDeduplicationService with exact duplicate records - same ID, email, and date")
+    public void testLeadDeduplicationServiceWithExactDuplicates() {
+        LeadDeduplicationService service = new LeadDeduplicationService();
+        
+        OffsetDateTime sameTime = OffsetDateTime.parse("2024-01-01T10:00:00+00:00");
+        
+        // Create test leads with EXACT duplicates (same ID, email, and date)
+        Lead lead1 = new Lead("exact_duplicate", "exact@example.com", "First", "Person", "123 St", sameTime);
+        Lead lead2 = new Lead("exact_duplicate", "exact@example.com", "Second", "Person", "456 Ave", sameTime); // Same ID, email, date
+        Lead lead3 = new Lead("exact_duplicate", "exact@example.com", "Third", "Person", "789 Rd", sameTime); // Same ID, email, date
+        
+        List<Lead> inputLeads = Arrays.asList(lead1, lead2, lead3);
+        List<Lead> deduplicatedLeads = service.deduplicateLeads(inputLeads);
+        
+        // Should have 1 lead after deduplication (last one wins)
+        assertEquals(1, deduplicatedLeads.size(), "Should have exactly 1 lead after deduplicating exact duplicates");
+        
+        // Verify the last lead was kept
+        Lead result = deduplicatedLeads.get(0);
+        assertEquals("exact_duplicate", result.getId());
+        assertEquals("exact@example.com", result.getEmail());
+        assertEquals("Third", result.getFirstName(), "Should keep the last occurrence (Third)");
+        assertEquals("789 Rd", result.getAddress(), "Should keep the last occurrence address");
+    }
 } 

@@ -106,9 +106,10 @@ public class LeadDeduplicationService {
         }
         logger.info("Created index mapping for " + leadToIndex.size() + " valid leads");
         
-        // Track the best lead for each unique ID and email
-        Map<String, Lead> bestLeadById = new HashMap<>();
-        Map<String, Lead> bestLeadByEmail = new HashMap<>();
+        // Single loop: directly build the final deduplicated result
+        Set<Lead> finalLeads = new HashSet<>();
+        Map<String, Lead> leadsById = new HashMap<>();
+        Map<String, Lead> leadsByEmail = new HashMap<>();
         
         // Process leads in order to handle "last in list" preference for identical dates
         for (int i = 0; i < leads.size(); i++) {
@@ -120,86 +121,73 @@ public class LeadDeduplicationService {
             
             logger.fine("Processing lead at index " + i + ": ID=" + currentLead.getId() + ", Email=" + currentLead.getEmail() + ", EntryDate=" + currentLead.getEntryDate());
             
-            // Check for ID duplicates
-            Lead existingById = bestLeadById.get(currentLead.getId());
+            // Check for ID conflicts
+            Lead existingById = leadsById.get(currentLead.getId());
             if (existingById != null) {
                 logger.info("Duplicate ID detected: " + currentLead.getId() + " - Existing: ID=" + existingById.getId() + ", Email=" + existingById.getEmail() + ", EntryDate=" + existingById.getEntryDate() + ", Index=" + getIndexOfLead(leadToIndex, existingById) + " | Current: ID=" + currentLead.getId() + ", Email=" + currentLead.getEmail() + ", EntryDate=" + currentLead.getEntryDate() + ", Index=" + i);
             }
             
-            if (shouldReplaceLead(existingById, getIndexOfLead(leadToIndex, existingById), currentLead, i)) {
-                if (existingById != null) {
-                    logger.info("Replacing existing lead by ID: " + currentLead.getId() + " - Reason: " + getReplacementReason(existingById, currentLead, i, getIndexOfLead(leadToIndex, existingById)));
-                }
-                bestLeadById.put(currentLead.getId(), currentLead);
-            }
-            
-            // Check for email duplicates
-            Lead existingByEmail = bestLeadByEmail.get(currentLead.getEmail());
+            // Check for email conflicts
+            Lead existingByEmail = leadsByEmail.get(currentLead.getEmail());
             if (existingByEmail != null) {
                 logger.info("Duplicate email detected: " + currentLead.getEmail() + " - Existing: ID=" + existingByEmail.getId() + ", Email=" + existingByEmail.getEmail() + ", EntryDate=" + existingByEmail.getEntryDate() + ", Index=" + getIndexOfLead(leadToIndex, existingByEmail) + " | Current: ID=" + currentLead.getId() + ", Email=" + currentLead.getEmail() + ", EntryDate=" + currentLead.getEntryDate() + ", Index=" + i);
             }
             
-            if (shouldReplaceLead(existingByEmail, getIndexOfLead(leadToIndex, existingByEmail), currentLead, i)) {
+            // Determine if we should replace existing leads
+            boolean shouldReplaceById = shouldReplaceLead(existingById, getIndexOfLead(leadToIndex, existingById), currentLead, i);
+            boolean shouldReplaceByEmail = shouldReplaceLead(existingByEmail, getIndexOfLead(leadToIndex, existingByEmail), currentLead, i);
+            
+            if (shouldReplaceById && shouldReplaceByEmail) {
+                // Replace both ID and email conflicts
+                logger.info("Replacing both ID and email conflicts: " + currentLead.getId() + " - Reason: " + getReplacementReason(existingById, currentLead, i, getIndexOfLead(leadToIndex, existingById)));
+                if (existingById != null) {
+                    logger.info("Replacing existing lead by ID: " + currentLead.getId() + " - Reason: " + getReplacementReason(existingById, currentLead, i, getIndexOfLead(leadToIndex, existingById)));
+                    finalLeads.remove(existingById);
+                }
+                if (existingByEmail != null && existingByEmail != existingById) {
+                    logger.info("Replacing existing lead by email: " + currentLead.getEmail() + " - Reason: " + getReplacementReason(existingByEmail, currentLead, i, getIndexOfLead(leadToIndex, existingByEmail)));
+                    finalLeads.remove(existingByEmail);
+                }
+                
+                // Add the new lead
+                finalLeads.add(currentLead);
+                leadsById.put(currentLead.getId(), currentLead);
+                leadsByEmail.put(currentLead.getEmail(), currentLead);
+                
+            } else if (shouldReplaceById) {
+                // Replace only ID conflict
+                if (existingById != null) {
+                    logger.info("Replacing existing lead by ID: " + currentLead.getId() + " - Reason: " + getReplacementReason(existingById, currentLead, i, getIndexOfLead(leadToIndex, existingById)));
+                    finalLeads.remove(existingById);
+                }
+                
+                // Add the new lead
+                finalLeads.add(currentLead);
+                leadsById.put(currentLead.getId(), currentLead);
+                leadsByEmail.put(currentLead.getEmail(), currentLead);
+                
+            } else if (shouldReplaceByEmail) {
+                // Replace only email conflict
                 if (existingByEmail != null) {
                     logger.info("Replacing existing lead by email: " + currentLead.getEmail() + " - Reason: " + getReplacementReason(existingByEmail, currentLead, i, getIndexOfLead(leadToIndex, existingByEmail)));
+                    finalLeads.remove(existingByEmail);
                 }
-                bestLeadByEmail.put(currentLead.getEmail(), currentLead);
+                
+                // Add the new lead
+                finalLeads.add(currentLead);
+                leadsById.put(currentLead.getId(), currentLead);
+                leadsByEmail.put(currentLead.getEmail(), currentLead);
+                
+            } else {
+                // No conflicts - add this lead
+                finalLeads.add(currentLead);
+                leadsById.put(currentLead.getId(), currentLead);
+                leadsByEmail.put(currentLead.getEmail(), currentLead);
+                logger.fine("Added non-conflicting lead: ID=" + currentLead.getId() + ", Email=" + currentLead.getEmail());
             }
         }
         
-        logger.info("After initial deduplication - Best leads by ID: " + bestLeadById.size() + ", Best leads by email: " + bestLeadByEmail.size());
-        
-        // Combine the results, ensuring no conflicts between ID and email constraints
-        Set<Lead> finalLeads = new HashSet<>();
-        Set<String> usedIds = new HashSet<>();
-        Set<String> usedEmails = new HashSet<>();
-        
-        // Combine candidates from both ID-based and email-based best leads
-        Set<Lead> allCandidates = new HashSet<>();
-        allCandidates.addAll(bestLeadById.values());
-        allCandidates.addAll(bestLeadByEmail.values());
-        
-        logger.info("Total unique candidates to process: " + allCandidates.size());
-        
-        // First pass: add leads that don't conflict
-        for (Lead lead : allCandidates) {
-            if (!usedIds.contains(lead.getId()) && !usedEmails.contains(lead.getEmail())) {
-                finalLeads.add(lead);
-                usedIds.add(lead.getId());
-                usedEmails.add(lead.getEmail());
-                logger.fine("Added non-conflicting lead: ID=" + lead.getId() + ", Email=" + lead.getEmail());
-            }
-        }
-        
-        logger.info("After first pass (non-conflicting leads): " + finalLeads.size() + " leads added");
-        
-        // Second pass: handle conflicts by choosing the lead with the newer date
-        for (Lead candidate : allCandidates) {
-            if (!finalLeads.contains(candidate)) {
-                Lead conflictingLead = findConflictingLead(finalLeads, candidate);
-                if (conflictingLead != null) {
-                    logger.info("Conflict resolution needed - Candidate: ID=" + candidate.getId() + ", Email=" + candidate.getEmail() + ", EntryDate=" + candidate.getEntryDate() + ", Index=" + getIndexOfLead(leadToIndex, candidate) + " | Conflicting: ID=" + conflictingLead.getId() + ", Email=" + conflictingLead.getEmail() + ", EntryDate=" + conflictingLead.getEntryDate() + ", Index=" + getIndexOfLead(leadToIndex, conflictingLead));
-                    
-                    int currentIndex = getIndexOfLead(leadToIndex, candidate);
-                    int conflictingIndex = getIndexOfLead(leadToIndex, conflictingLead);
-                    
-                    if (shouldReplaceLead(conflictingLead, conflictingIndex, candidate, currentIndex)) {
-                        logger.info("Replacing conflicting lead with candidate - Reason: " + getReplacementReason(conflictingLead, candidate, currentIndex, conflictingIndex));
-                        finalLeads.remove(conflictingLead);
-                        usedIds.remove(conflictingLead.getId());
-                        usedEmails.remove(conflictingLead.getEmail());
-                        
-                        finalLeads.add(candidate);
-                        usedIds.add(candidate.getId());
-                        usedEmails.add(candidate.getEmail());
-                    } else {
-                        logger.info("Keeping conflicting lead - Reason: " + getReplacementReason(candidate, conflictingLead, currentIndex, conflictingIndex));
-                    }
-                }
-            }
-        }
-        
-        logger.info("After conflict resolution: " + finalLeads.size() + " leads in final result");
+        logger.info("After single-loop processing: " + finalLeads.size() + " leads in final result");
         
         // Convert to list and sort by entry date for consistent output
         List<Lead> result = finalLeads.stream()
@@ -216,7 +204,7 @@ public class LeadDeduplicationService {
      */
     private boolean shouldReplaceLead(Lead existing, int existingIndex, Lead current, int currentIndex) {
         if (existing == null) {
-            return true; // No existing lead, so current should be used
+            return false; // No existing lead, so current should be used
         }
         
         OffsetDateTime existingDate = existing.getEntryDate();
@@ -229,7 +217,8 @@ public class LeadDeduplicationService {
             return false;
         } else {
             // Rule 3: If dates are identical, prefer the one that appeared last in the list
-            return currentIndex > existingIndex;
+            // For exact duplicates (same ID, email, and date), always prefer the later one
+            return currentIndex >= existingIndex;
         }
     }
     
@@ -257,11 +246,14 @@ public class LeadDeduplicationService {
         }
     }
     
+
+    
     /**
      * Creates a unique key for a lead based on ID, email, and entry date
      */
     private String createLeadKey(Lead lead) {
-        return lead.getId() + "|" + lead.getEmail() + "|" + lead.getEntryDate().toString();
+        // return lead.getId() + "|" + lead.getEmail() + "|" + lead.getEntryDate().toString();
+        return Objects.hashCode(lead) + lead.getId() + lead.getEmail() + lead.getEntryDate().toString();
     }
     
     /**
@@ -275,15 +267,17 @@ public class LeadDeduplicationService {
     }
     
     /**
-     * Finds a lead in the final set that conflicts with the given lead (same ID or email)
+     * Inner class to store a lead along with its index in the original list
      */
-    private Lead findConflictingLead(Set<Lead> finalLeads, Lead targetLead) {
-        for (Lead lead : finalLeads) {
-            if (Objects.equals(lead.getId(), targetLead.getId()) || 
-                Objects.equals(lead.getEmail(), targetLead.getEmail())) {
-                return lead;
-            }
+    private static class LeadWithIndex {
+        final Lead lead;
+        final int index;
+        
+        LeadWithIndex(Lead lead, int index) {
+            this.lead = lead;
+            this.index = index;
         }
-        return null;
     }
+    
+
 } 
