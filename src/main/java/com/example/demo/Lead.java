@@ -27,6 +27,16 @@ public class Lead {
     @JsonProperty("entryDate")
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ssXXX")
     private OffsetDateTime entryDate;
+
+    private int _index = -1;
+    
+    public int getIndex() {
+        return _index;
+    }
+
+    public void setIndex(int index) {
+        this._index = index;
+    }
     
     // Default constructor for Jackson
     public Lead() {}
